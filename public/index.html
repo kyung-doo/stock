@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>상승률 상위 종목 추천기</title>
+    <style>
+      body {
+        font-family: sans-serif;
+      }
+      #loading {
+        display: none;
+        font-weight: bold;
+        color: blue;
+      }
+      table {
+        border-collapse: collapse;
+        margin-top: 10px;
+        width: 100%;
+      }
+      th,
+      td {
+        border: 1px solid #ccc;
+        padding: 4px 8px;
+        text-align: center;
+      }
+      input,
+      textarea,
+      select {
+        margin: 4px;
+      }
+      #chartModal {
+        display: none;
+        position: fixed;
+        top: 10%;
+        left: 10%;
+        width: 80%;
+        height: 80%;
+        background: #fff;
+        border: 1px solid #ccc;
+        padding: 10px;
+        z-index: 1000;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>📈 상승률 상위 종목 추천기</h2>
+
+    <fieldset>
+      <legend>데이터 및 필터</legend>
+      상위 추천 N개: <input id="topN" type="number" value="20" /><br />
+      최소 동반하락 비율:
+      <input id="minCoDown" type="number" step="0.01" value="0.5" /><br />
+      최대 ATR%: <input id="maxATR" type="number" step="0.1" value="10" /><br />
+      지수 민감도 최근 일수:
+      <input id="recentDays" type="number" value="10" /><br />
+
+      <!-- ✅ 개월 수 선택 -->
+      기간(개월):
+      <select id="months">
+        <option value="1">1개월</option>
+        <option value="2">2개월</option>
+        <option value="3" selected>3개월</option>
+        <option value="4">4개월</option>
+        <option value="5">5개월</option>
+        <option value="6">6개월</option>
+        <option value="7">7개월</option>
+        <option value="8">8개월</option>
+        <option value="9">9개월</option>
+        <option value="10">10개월</option>
+        <option value="11">11개월</option>
+        <option value="12">12개월</option></select
+      ><br />
+
+      <button id="run">추천 실행</button>
+      <button id="reset">초기화</button>
+      <div id="loading">⏳ 추천 계산 중...</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>추천 결과</legend>
+      <table id="result">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Return</th>
+            <th>Co-Down Rate</th>
+            <th>ATR%</th>
+            <th>Score</th>
+            <th>Buy Price</th>
+            <th>Sell Price</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </fieldset>
+
+    <fieldset>
+      <legend>리스크 관리 (포지션 사이징)</legend>
+      추천 종목 선택:
+      <select id="selectedSymbol">
+        <option value="">-- 선택하세요 --</option></select
+      ><br />
+      총 투자자금(원):
+      <input id="capital" type="text" value="1,000,000" /><br />
+      트레이드당 리스크(%):
+      <input id="riskPct" type="number" step="0.1" value="1" /><br />
+      진입가(원): <input id="entryPrice" type="text" /><br />
+      손절가(원): <input id="stopPrice" type="text" /><br />
+      찰산/호가 보정(fx):
+      <input id="adjustFx" type="number" step="0.1" value="1" /><br />
+      <button id="calcRisk">리스크 계산</button>
+      <div id="riskResult"></div>
+    </fieldset>
+
+    <!-- 모달 팝업 -->
+    <div id="chartModal">
+      <button
+        onclick="document.getElementById('chartModal').style.display='none'"
+      >
+        닫기
+      </button>
+      <div id="chartContainer" style="width: 100%; height: 90%"></div>
+    </div>
+
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+      const qs = (id) => document.getElementById(id);
+
+      // 추천 실행
+      qs("run").addEventListener("click", async () => {
+        qs("loading").style.display = "block";
+        const topN = parseInt(qs("topN").value, 10);
+        const minCoDown = parseFloat(qs("minCoDown").value);
+        const maxATR = parseFloat(qs("maxATR").value);
+        const months = parseInt(qs("months").value, 10); // ✅ 선택한 개월 수 반영
+
+        const res = await fetch(`/top-risers?topN=${topN}&months=${months}`);
+        const json = await res.json();
+        qs("loading").style.display = "none";
+
+        const tbody = document.querySelector("#result tbody");
+        tbody.innerHTML = "";
+        const select = qs("selectedSymbol");
+        select.innerHTML = '<option value="">-- 선택하세요 --</option>';
+
+        json.symbols.forEach((s) => {
+          if (s.coDownRate < minCoDown || s.atrPct > maxATR) return;
+          const score = s.rMonths * 100 - s.atrPct * 0.5 + s.coDownRate * 100;
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+        <td>${s.symbol}</td>
+        <td class="stockName" style="cursor:pointer; color:blue;">${s.name}</td>
+        <td>${(s.rMonths * 100).toFixed(2)}%</td>
+        <td>${(s.coDownRate * 100).toFixed(2)}%</td>
+        <td>${s.atrPct.toFixed(2)}%</td>
+        <td>${score.toFixed(2)}</td>
+        <td>${Math.round(s.buyPrice).toLocaleString()}</td>
+        <td>${Math.round(s.sellPrice).toLocaleString()}</td>
+      `;
+          tbody.appendChild(tr);
+
+          // 드롭다운에 추가
+          const opt = document.createElement("option");
+          opt.value = JSON.stringify(s);
+          opt.text = `${s.symbol} (${s.name})`;
+          select.appendChild(opt);
+
+          // 종목명 클릭 시 차트 모달 열기
+          tr.querySelector(".stockName").addEventListener("click", async () => {
+            const kospiRes = await fetch(
+              `/daily?symbol=^KS11&months=${months}`
+            );
+            const kospiData = await kospiRes.json();
+            const stockRes = await fetch(
+              `/daily?symbol=${s.symbol}&months=${months}`
+            );
+            const stockData = await stockRes.json();
+
+            document.getElementById("chartModal").style.display = "block";
+
+            const kospiTrace = {
+              x: kospiData.map((d) => d.date),
+              y: kospiData.map((d) => d.close),
+              type: "scatter",
+              mode: "lines",
+              name: "코스피 지수",
+              line: { color: "green" },
+              yaxis: "y2",
+            };
+
+            const stockTrace = {
+              x: stockData.map((d) => d.date),
+              open: stockData.map((d) => d.open),
+              high: stockData.map((d) => d.high),
+              low: stockData.map((d) => d.low),
+              close: stockData.map((d) => d.close),
+              type: "candlestick",
+              name: `${s.name} 캔들`,
+              yaxis: "y",
+              increasing: { line: { color: "red" } },
+              decreasing: { line: { color: "blue" } },
+            };
+
+            const layout = {
+              title: `${s.name} (${s.symbol}) + 코스피 지수`,
+              height: 600,
+              xaxis: {
+                title: "날짜",
+                rangeslider: { visible: false },
+                tickformat: "%Y-%m-%d",
+              },
+              yaxis: { title: `${s.name} 주가` },
+              yaxis2: {
+                title: "코스피 지수",
+                overlaying: "y",
+                side: "right",
+                showgrid: false,
+              },
+              legend: { title: { text: "범례" }, orientation: "h" },
+            };
+
+            Plotly.newPlot("chartContainer", [stockTrace, kospiTrace], layout);
+          });
+        });
+      });
+
+      // 초기화
+      qs("reset").addEventListener("click", () => {
+        document.querySelector("#result tbody").innerHTML = "";
+        qs("selectedSymbol").innerHTML =
+          '<option value="">-- 선택하세요 --</option>';
+      });
+
+      // 종목 선택 시 진입가/손절가 자동 채우기
+      qs("selectedSymbol").addEventListener("change", () => {
+        if (!qs("selectedSymbol").value) return;
+        const s = JSON.parse(qs("selectedSymbol").value);
+        qs("entryPrice").value = Math.round(s.buyPrice).toLocaleString();
+        qs("stopPrice").value = Math.round(s.buyPrice * 0.95).toLocaleString();
+      });
+
+      // 리스크 계산
+      qs("calcRisk").addEventListener("click", () => {
+        const capital = parseFloat(qs("capital").value.replace(/,/g, ""));
+        const riskPct = parseFloat(qs("riskPct").value);
+        const entry = parseFloat(qs("entryPrice").value.replace(/,/g, ""));
+        const stop = parseFloat(qs("stopPrice").value.replace(/,/g, ""));
+        const fx = parseFloat(qs("adjustFx").value);
+
+        if (!entry || !stop) {
+          qs("riskResult").innerText = "⚠️ 종목을 선택하세요.";
+          return;
+        }
+
+        const riskPerTrade = capital * (riskPct / 100);
+        const lossPerShare = entry - stop;
+        const qty = Math.floor(riskPerTrade / lossPerShare / fx);
+        const total = qty * entry;
+
+        qs(
+          "riskResult"
+        ).innerText = `추천 수량: ${qty.toLocaleString()}주, 총 투자금: ${total.toLocaleString()}원`;
+
+        qs("capital").value = Math.round(capital).toLocaleString();
+        qs("entryPrice").value = Math.round(entry).toLocaleString();
+        qs("stopPrice").value = Math.round(stop).toLocaleString();
+      });
+    </script>
+  </body>
+</html>
