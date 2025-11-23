@@ -72,7 +72,7 @@ function calcATR(sd, days=14) {
 app.get('/top-risers', async (req, res) => {
   const topN = parseInt(req.query.topN || '20', 10);
   const months = parseInt(req.query.months || '3', 10);   // ✅ 개월 수 파라미터 추가
-  const symbols = getAllKOSPI().slice(0, 100);
+  const symbols = getAllKOSPI();
 
   // 코스피 지수 데이터
   const kospiSymbol = "^KS11";
