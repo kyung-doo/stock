@@ -41,10 +41,14 @@
         z-index: 1000;
         overflow: auto;
       }
+      #kospi {
+        font-size: 20px;
+        color: #333;
+      }
     </style>
   </head>
   <body>
-    <h2>📈 상승률 상위 종목 추천기</h2>
+    <h2>📈 상승률 상위 종목 추천기 <span id="kospi">예측 코스피지수 불러오는중...</span></h2>
 
     <fieldset>
       <legend>데이터 및 필터</legend>
@@ -127,6 +131,17 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script>
       const qs = (id) => document.getElementById(id);
+
+      async function init() {
+        try{
+          const res = await fetch(`/kospi-forecast`);
+          const json = await res.json();
+          qs('kospi').innerHTML = `rmse: ${json.rmse}, 오늘 예측 코스피: ${json.todayClose}, 내일 예측 코스피: ${json.tomorrowClose}`;
+        } catch(e) {
+          console.error(e);
+        }
+      }
+      init();
 
       // 추천 실행
       qs("run").addEventListener("click", async () => {
