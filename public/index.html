@@ -49,8 +49,8 @@
   </head>
   <body>
     <h2>📈 상승률 상위 종목 추천기 <span id="kospi">예측 코스피지수 불러오는중...</span></h2>
-
-    <fieldset>
+    <button id="showKospiChart">📊 최근 3개월 KOSPI 실제 vs 예측 보기</button>
+    <fieldset style="margin-top: 20px;">
       <legend>데이터 및 필터</legend>
       상위 추천 N개: <input id="topN" type="number" value="20" /><br />
       최소 동반하락 비율:
@@ -128,15 +128,37 @@
       <div id="chartContainer" style="width: 100%; height: 90%"></div>
     </div>
 
+    <!-- 모달 팝업 -->
+    <div id="chartModal">
+      <button onclick="document.getElementById('chartModal').style.display='none'">
+        닫기
+      </button>
+      <div id="chartContainer" style="width: 100%; height: 90%"></div>
+    </div>
+
+    <!-- ✅ 새로운 모달: 3개월 실제 vs 예측 -->
+    <div id="kospiModal" style="display:none; position:fixed; top:10%; left:10%; width:80%; height:80%; background:#fff; border:1px solid #ccc; padding:10px; z-index:1000; overflow:auto;">
+      <button onclick="document.getElementById('kospiModal').style.display='none'">닫기</button>
+      <div id="kospiChartContainer" style="width:100%; height:90%"></div>
+    </div>
+
+
+
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script>
       const qs = (id) => document.getElementById(id);
 
       async function init() {
         try{
-          const res = await fetch(`/kospi-forecast`);
+          const res = await fetch(`/kospi-predict`);
           const json = await res.json();
-          qs('kospi').innerHTML = `rmse: ${json.rmse}, 오늘 예측 코스피: ${json.todayClose}, 내일 예측 코스피: ${json.tomorrowClose}`;
+          qs('kospi').innerHTML = `rmse: ${json.rmse}, 오늘 예측 코스피: ${json.todayClose}, 다음 6일 예측 코스피: ${json.weekClose.join(', ')}`;
+          // ✅ 버튼 클릭 시 모달 열고 차트 표시
+          qs("showKospiChart").addEventListener("click", () => {
+            document.getElementById("kospiModal").style.display = "block";
+            Plotly.newPlot("kospiChartContainer", json.chart.data, json.chart.layout);
+          });
+
         } catch(e) {
           console.error(e);
         }

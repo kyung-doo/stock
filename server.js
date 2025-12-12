@@ -1,8 +1,10 @@
 import express from 'express';
 import { execSync } from 'child_process';
 import YahooFinance from 'yahoo-finance2';
+import { spawn } from "child_process";
 
 const yahooFinance = new YahooFinance();
+
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
@@ -155,16 +157,40 @@ app.get('/daily', async (req, res) => {
   res.json(data);
 });
 
-app.get('/kospi-forecast', (req, res) => {
-  try {
-    const output = execSync('python kospi.py', { encoding: 'utf-8' });
-    const result = JSON.parse(output);
-    res.json(result);
-  } catch (err) {
-    console.error('Python 실행 오류:', err);
-    res.status(500).json({ error: '예측 실패' });
-  }
+app.get("/kospi-predict", (req, res) => {
+  const py = spawn("python", ["predict_kospi.py"], {
+    encoding: "utf-8"
+  });
+
+  let data = "";
+
+  py.stdout.on("data", (chunk) => {
+    data += chunk.toString("utf8");
+  });
+
+  py.stderr.on("data", (err) => {
+    console.error("Python error:", err.toString("utf8"));
+  });
+
+  py.on("close", () => {
+    try {
+      const start = data.indexOf("{");
+      const end = data.lastIndexOf("}") + 1;
+      const jsonStr = data.slice(start, end);
+
+      const result = JSON.parse(jsonStr);
+
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.json(result);
+
+    } catch (e) {
+      console.error("JSON parse error:", e);
+      res.status(500).json({ error: "Failed to parse Python output" });
+    }
+  });
 });
+
+
 
 
 app.listen(3000, () => console.log("✅ Server running on http://localhost:3000"));

@@ -2,6 +2,7 @@
   "dependencies": {
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "iconv-lite": "^0.7.0",
     "node-fetch": "^3.3.2",
     "yahoo-finance2": "^3.10.2"
   }
